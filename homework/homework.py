@@ -4,6 +4,14 @@ Escriba el codigo que ejecute la accion solicitada.
 
 # pylint: disable=import-outside-toplevel
 
+import pandas as pd
+import os
+import zipfile
+from pathlib import Path
+
+INPUT_FOLDER = "files/input/"
+OUTPUT_FOLDER = "files/output/"
+Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
 
 def clean_campaign_data():
     """
@@ -49,8 +57,55 @@ def clean_campaign_data():
 
 
     """
+    
+# DataFrame inicial vacío
+df = pd.DataFrame()
 
-    return
+# Iterar sobre los archivos .zip en la carpeta de entrada
+for zip_file in os.listdir(INPUT_FOLDER):
+    if zip_file.endswith(".zip"):
+        zip_path = os.path.join(INPUT_FOLDER, zip_file)
+
+        # Abrir el archivo .zip
+        with zipfile.ZipFile(zip_path, 'r') as z:
+            
+            # Iterar sobre los archivos dentro del .zip
+            for csv_file in z.namelist():
+                if csv_file.endswith(".csv"):  # Asegurarse de que sea un archivo CSV
+                    with z.open(csv_file) as f:
+                        # Leer el CSV y concatenarlo con df
+                        temp_df = pd.read_csv(f)
+                        df = pd.concat([df, temp_df], ignore_index=True)
+
+                        # client.csv
+                        client_df = df[['client_id', 'age', 'job', 'marital', 'education', 'credit_default', 'mortgage']]
+                        client_df['job'] = client_df['job'].str.replace('.', '', regex=False).str.replace('-', '_', regex=False)
+                        client_df["education"] = client_df["education"].str.replace(".", "_", regex=False).replace("unknown", pd.NA)
+                        client_df['credit_default'] = client_df['credit_default'].apply(lambda x: 1 if x == "yes" else 0)
+                        client_df['mortgage'] = client_df['mortgage'].apply(lambda x: 1 if x == "yes" else 0)
+                        client_output_path = os.path.join(OUTPUT_FOLDER, "client.csv")
+                        client_df.to_csv(client_output_path, index=False)
+
+                        #campaign.csv
+                        campaign_df = df[['client_id', 'number_contacts', 'contact_duration',
+                                          'previous_campaign_contacts', 'previous_outcome', 'campaign_outcome',
+                                          'day', 'month']]
+                        campaign_df['previous_outcome'] = campaign_df['previous_outcome'].apply(lambda x: 1 if x == "success" else 0)
+                        campaign_df['campaign_outcome'] = campaign_df['campaign_outcome'].apply(lambda x: 1 if x == "yes" else 0)
+                        # Convertir a datetime
+                        campaign_df['last_contact_date'] = pd.to_datetime(
+                            campaign_df['day'].astype(str) + "-" + campaign_df['month'] + "-2022", format="%d-%b-%Y",errors='coerce'
+                        )
+                        # Eliminar las columnas originales 'day' y 'month'
+                        campaign_df = campaign_df.drop(columns=['day', 'month'])
+                       
+                        campaign_output_path = os.path.join(OUTPUT_FOLDER, "campaign.csv")
+                        campaign_df.to_csv(campaign_output_path, index=False)
+
+                        # economics.csv
+                        economics_df = df[['client_id', 'cons_price_idx', 'euribor_three_months']]
+                        economics_output_path = os.path.join(OUTPUT_FOLDER, "economics.csv")
+                        economics_df.to_csv(economics_output_path, index=False)
 
 
 if __name__ == "__main__":
